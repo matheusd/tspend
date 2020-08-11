@@ -19,9 +19,7 @@ import (
 	"github.com/jessevdk/go-flags"
 )
 
-// appName is the generic name of the app. Switch to a constant if this is to
-// be long lived.
-var appName = filepath.Base(os.Args[0])
+var appName = "tspend"
 
 func version() string {
 	return "0.1.0"
@@ -71,7 +69,6 @@ const (
 var (
 	defaultConfigFilename = appName + ".conf"
 	defaultConfigDir      = dcrutil.AppDataDir(appName, false)
-	defaultDataDir        = filepath.Join(defaultConfigDir, "data")
 	defaultLogDir         = filepath.Join(defaultConfigDir, "logs", string(defaultActiveNet))
 	defaultConfigFile     = filepath.Join(defaultConfigDir, defaultConfigFilename)
 	defaultDcrdDir        = dcrutil.AppDataDir("dcrd", false)
@@ -95,7 +92,7 @@ type config struct {
 
 	// Dcrd Connection Options
 
-	DcrdConnect   string `short:"c" long:"dcrdconnect" description:"Network address of the RPC interface of the dcrd node to connect to (default: localhost port 9109, testnet: 19109, simnet: 19556)"`
+	DcrdConnect   string `long:"dcrdconnect" description:"Network address of the RPC interface of the dcrd node to connect to (default: localhost port 9109, testnet: 19109, simnet: 19556)"`
 	DcrdCertPath  string `long:"dcrdcertpath" description:"File path location of the dcrd RPC certificate"`
 	DcrdCertBytes string `long:"dcrdcertbytes" description:"The pem-encoded RPC certificate for dcrd"`
 	DcrdUser      string `short:"u" long:"dcrduser" description:"RPC username to authenticate with dcrd"`
@@ -103,14 +100,17 @@ type config struct {
 
 	// TSpend data
 
-	FeeRate      int64    `long:"feerate" description:"Fee rate for the tspend in atoms/kB"`
-	PrivKey      string   `long:"privkey" description:"Private key to use to generate tspend"`
-	OpReturnData string   `long:"opreturndata" description:"OP_RETURN payload data. Random data if unspencified"`
-	Publish      bool     `long:"publish" description:"Directly publish the tspend"`
-	Expiry       int      `long:"expiry" description:"Expiry to use"`
-	Addresses    []string `long:"address" description:"List of addresses to send to. Number of addresses must match amounts"`
-	Amounts      []int64  `long:"amount" description:"List of amounts to send in atoms. Number of amounts must match addresses"`
-	Spew         bool     `long:"spew" description:"Spew the result tspend"`
+	FeeRate       int64    `long:"feerate" description:"Fee rate for the tspend in atoms/kB"`
+	PrivKey       string   `long:"privkey" description:"Private key to use to sign tspend"`
+	PrivKeyFile   string   `long:"privkeyfile" description:"Private key file to use to sign tspend"`
+	OpReturnData  string   `long:"opreturndata" description:"OP_RETURN payload data. Random data if unspencified"`
+	Publish       bool     `long:"publish" description:"Directly publish the tspend"`
+	Expiry        int      `long:"expiry" description:"Expiry to use"`
+	CurrentHeight int      `short:"c" long:"currentheight" description:"Current blockchain height to calculate a sane expiry from"`
+	Addresses     []string `long:"address" description:"List of addresses to send to. Number of addresses must match amounts"`
+	Amounts       []int64  `long:"amount" description:"List of amounts to send in atoms. Number of amounts must match addresses"`
+	CSV           string   `long:"csv" description:"Generate the tspend based on a csv file"`
+	Spew          bool     `long:"spew" description:"Spew the result tspend"`
 
 	// The rest of the members of this struct are filled by loadConfig().
 
@@ -135,7 +135,31 @@ func (c *config) needsDcrd() bool {
 }
 
 func (c *config) privKeyFromStdin() bool {
-	return c.PrivKey == "" || c.PrivKey == "-"
+	return c.PrivKey == "-"
+}
+
+func (c *config) fillActiveNet() error {
+	numNets := 0
+	c.activeNet = defaultActiveNet
+	if c.MainNet {
+		numNets++
+		c.activeNet = cnMainNet
+	}
+	if c.TestNet {
+		numNets++
+		c.activeNet = cnTestNet
+	}
+	if c.SimNet {
+		numNets++
+		c.activeNet = cnSimNet
+	}
+	if numNets > 1 {
+		return errors.New("mainnet, testnet and simnet params can't be " +
+			"used together -- choose one of the three")
+	}
+
+	c.chainParams = c.activeNet.chainParams()
+	return nil
 }
 
 // validLogLevel returns whether or not logLevel is a valid debug log level.
@@ -280,7 +304,7 @@ func loadConfig() (*config, []string, error) {
 
 	// Create the home directory if it doesn't already exist.
 	funcName := "loadConfig"
-	err = os.MkdirAll(defaultDataDir, 0700)
+	err = os.MkdirAll(defaultConfigDir, 0700)
 	if err != nil {
 		// Show a nicer error message if it's because a symlink is
 		// linked to a directory that does not exist (probably because
@@ -298,32 +322,12 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
-	// Multiple networks can't be selected simultaneously.  Count number of
-	// network flags passed and assign active network params.
-	numNets := 0
-	cfg.activeNet = defaultActiveNet
-	if cfg.MainNet {
-		numNets++
-		cfg.activeNet = cnMainNet
-	}
-	if cfg.TestNet {
-		numNets++
-		cfg.activeNet = cnTestNet
-	}
-	if cfg.SimNet {
-		numNets++
-		cfg.activeNet = cnSimNet
-	}
-	if numNets > 1 {
-		str := "%s: mainnet, testnet and simnet params can't be " +
-			"used together -- choose one of the three"
-		err := fmt.Errorf(str, funcName)
-		fmt.Fprintln(os.Stderr, err)
-		fmt.Fprintln(os.Stderr, usageMessage)
+	// Determine the final network.
+	if err := cfg.fillActiveNet(); err != nil {
 		return nil, nil, err
 	}
-	cfg.chainParams = cfg.activeNet.chainParams()
 
+	// Number of addresses and amounts must match.
 	if len(cfg.Addresses) != len(cfg.Amounts) {
 		return nil, nil, fmt.Errorf("Number of addresses (%d) must match "+
 			"number of amounts (%d)", len(cfg.Addresses), len(cfg.Amounts))
@@ -374,6 +378,16 @@ func loadConfig() (*config, []string, error) {
 		if err != nil {
 			return nil, nil, fmt.Errorf("error while checking underlying "+
 				"dcrd: %v", err)
+		}
+	}
+
+	// Fill in the default PrivKeyFile if both it and PrivKey are empty.
+	if cfg.PrivKeyFile == "" && cfg.PrivKey == "" {
+		cfg.PrivKeyFile = filepath.Join(defaultConfigDir, string(cfg.activeNet)+".key")
+	}
+	if cfg.PrivKeyFile != "" {
+		if _, err := os.Stat(cfg.PrivKeyFile); err != nil {
+			return nil, nil, fmt.Errorf("PrivKeyFile error: %v", err)
 		}
 	}
 

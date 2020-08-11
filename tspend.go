@@ -15,7 +15,6 @@ import (
 	"github.com/decred/dcrd/blockchain/stake/v3"
 	blockchain "github.com/decred/dcrd/blockchain/standalone/v2"
 	"github.com/decred/dcrd/chaincfg/chainhash"
-	"github.com/decred/dcrd/dcrec/secp256k1/v3"
 	"github.com/decred/dcrd/dcrutil/v3"
 	"github.com/decred/dcrd/rpcclient/v6"
 	"github.com/decred/dcrd/txscript/v3"
@@ -27,21 +26,51 @@ import (
 // OP_DATA_65 + [64 byte schnorr sig + sighashtype byte ] + OP_DATA_33 + [33 byte pubkey]
 const tspend_sigscript_size int = 1 + 65 + 1 + 33
 
-func readPrivKey() (string, error) {
-	var pk []byte
+func privKeyFromStdIn(pk *[32]byte) error {
+	var hexPk []byte
 	var err error
 	fd := int(os.Stdin.Fd())
 	if terminal.IsTerminal(fd) {
 		fmt.Print("Input the private key: ")
-		pk, err = terminal.ReadPassword(fd)
+		hexPk, err = terminal.ReadPassword(fd)
 	} else {
 		r := bufio.NewReader(os.Stdin)
-		pk, err = r.ReadBytes('\n')
+		hexPk, err = r.ReadBytes('\n')
 		if err == io.EOF {
 			err = nil
 		}
 	}
-	return strings.TrimSpace(string(pk)), err
+	if err != nil {
+		return err
+	}
+	hexPk = bytes.TrimSpace(hexPk)
+	_, err = hex.Decode(pk[:], hexPk)
+	zeroBytes(hexPk)
+	return err
+}
+
+func privKeyFromHex(hexPk string, pk *[32]byte) error {
+	hexTrimmed := strings.TrimSpace(hexPk)
+	_, err := hex.Decode(pk[:], []byte(hexTrimmed))
+	return err
+}
+
+func loadPrivKey(cfg *config, pk *[32]byte) error {
+	if cfg.PrivKeyFile != "" {
+		return decryptPrivKeyFile(cfg.PrivKeyFile, pk)
+	}
+
+	if cfg.PrivKey == "-" {
+		return privKeyFromStdIn(pk)
+	}
+
+	return privKeyFromHex(cfg.PrivKey, pk)
+}
+
+func zeroBytes(s []byte) {
+	for i := range s {
+		s[i] = 0
+	}
 }
 
 func genTspend(cfg *config, ctx context.Context) error {
@@ -154,29 +183,30 @@ func genTspend(cfg *config, ctx context.Context) error {
 	// Fill in the value in with the fee.
 	msgTx.TxIn[0].ValueIn = totalPayout + int64(fee)
 
-	// Read priv key from stdin if needed.
-	privKeyHex := cfg.PrivKey
-	if cfg.privKeyFromStdin() {
-		privKeyHex, err = readPrivKey()
-		if err != nil {
-			return err
-		}
-	}
-
-	// Calculate TSpend signature without SigHashType.
-	privKeyBytes, err := hex.DecodeString(privKeyHex)
-	if err != nil {
+	// Load the priv key.
+	var privKeyBytes [32]byte
+	if err := loadPrivKey(cfg, &privKeyBytes); err != nil {
 		return err
 	}
-	sigscript, err := txscript.TSpendSignatureScript(msgTx, privKeyBytes)
+
+	// Calculate TSpend signature without SigHashType. Zero out the
+	// privKeyBytes afterwards as they won't be needed anymore.
+	sigscript, err := txscript.TSpendSignatureScript(msgTx, privKeyBytes[:])
+	zeroBytes(privKeyBytes[:])
 	if err != nil {
 		return err
 	}
 	msgTx.TxIn[0].SignatureScript = sigscript
 
-	_, _, err = stake.CheckTSpend(msgTx)
+	_, pubKeyBytes, err := stake.CheckTSpend(msgTx)
 	if err != nil {
 		return fmt.Errorf("CheckTSPend failed: %v", err)
+	}
+
+	// Determine the corresponding public key for debug reasons.
+	var foundPiKey bool
+	for i := 0; i < len(chainParams.PiKeys) && !foundPiKey; i++ {
+		foundPiKey = foundPiKey || bytes.Equal(pubKeyBytes, chainParams.PiKeys[i])
 	}
 
 	// Publish the tx if requested.
@@ -185,14 +215,6 @@ func genTspend(cfg *config, ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("Failed to publish tspend: %v", err)
 		}
-	}
-
-	privKey := secp256k1.PrivKeyFromBytes(privKeyBytes)
-	pubKey := privKey.PubKey()
-	pubKeyBytes := pubKey.SerializeCompressed()
-	var foundPiKey bool
-	for i := 0; i < len(chainParams.PiKeys) && !foundPiKey; i++ {
-		foundPiKey = foundPiKey || bytes.Equal(pubKeyBytes, chainParams.PiKeys[i])
 	}
 
 	rawTx, err := msgTx.Bytes()

@@ -26,11 +26,14 @@ $ go run . \
   --publish
 ```
 
-Using with an encrypted private key. This demo requires [age](https://github.com/FiloSottile/age).
+Using with an encrypted private key file. Requires [ss](https://github.com/jrick/ss).
 
 ```shell
-# Create the encrypted key file however you want.
-echo "62deae1ab2b1ebd96a28c80e870aee325bed359e83d8db2464ef999e616a9eef" | age -p simnet-pi-key.age
+# Using ss and PKI encryption
+echo "62deae1ab2b1ebd96a28c80e870aee325bed359e83d8db2464ef999e616a9eef" | ss encrypt -out ~/.tspend/simnet.key
+
+# Using ss and passphrase encryption
+echo "62deae1ab2b1ebd96a28c80e870aee325bed359e83d8db2464ef999e616a9eef" | ss encrypt -passphase -out ~/.tspend/simnet.key
 
 # Generate a tspend while decrypting from the file.
 age -d simnet-pi-key.age | go run . --simnet \
