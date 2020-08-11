@@ -38,3 +38,9 @@ age -d simnet-pi-key.age | go run . --simnet \
   --address="SsinZEEYLHmyz3NXjijcJ2HFy6zvh4VyKLR" \
   --amount 1063000000
 ```
+
+Figure out the needed expiry for some block height.
+
+```shell
+go run ./expiryfor --simnet 240
+```
