@@ -32,6 +32,7 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+	height += 1 // Assume height is mined, so start calc for height+1.
 	tvi := chain.TreasuryVoteInterval
 	mul := chain.TreasuryVoteIntervalMultiplier
 
