@@ -103,6 +103,7 @@ type config struct {
 
 	// TSpend data
 
+	FeeRate      int64    `long:"feerate" description:"Fee rate for the tspend in atoms/kB"`
 	PrivKey      string   `long:"privkey" description:"Private key to use to generate tspend"`
 	OpReturnData string   `long:"opreturndata" description:"OP_RETURN payload data. Random data if unspencified"`
 	Publish      bool     `long:"publish" description:"Directly publish the tspend"`
@@ -131,6 +132,10 @@ func (c *config) dcrdConnConfig() *rpcclient.ConnConfig {
 // the dcrd instance.
 func (c *config) needsDcrd() bool {
 	return c.Expiry == 0 || c.Publish
+}
+
+func (c *config) privKeyFromStdin() bool {
+	return c.PrivKey == "" || c.PrivKey == "-"
 }
 
 // validLogLevel returns whether or not logLevel is a valid debug log level.
@@ -209,6 +214,7 @@ func loadConfig() (*config, []string, error) {
 	cfg := config{
 		DcrdCertPath: defaultDcrdCertPath,
 		DebugLevel:   defaultLogLevel,
+		FeeRate:      int64(DefaultRelayFeePerKb),
 	}
 
 	// Pre-parse the command line options to see if an alternative config
@@ -317,11 +323,6 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 	cfg.chainParams = cfg.activeNet.chainParams()
-
-	if cfg.PrivKey == "" || cfg.PrivKey == "-" {
-		// TODO: read from stdin.
-		return nil, nil, fmt.Errorf("reading privkey from stdin not implemented")
-	}
 
 	if len(cfg.Addresses) != len(cfg.Amounts) {
 		return nil, nil, fmt.Errorf("Number of addresses (%d) must match "+

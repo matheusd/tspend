@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"io"
+	"os"
+	"strings"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/decred/dcrd/blockchain/stake/v3"
@@ -16,15 +20,33 @@ import (
 	"github.com/decred/dcrd/rpcclient/v6"
 	"github.com/decred/dcrd/txscript/v3"
 	"github.com/decred/dcrd/wire"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 // tspend_sigscript_size is the size of a tspend sigscript:
 // OP_DATA_65 + [64 byte schnorr sig + sighashtype byte ] + OP_DATA_33 + [33 byte pubkey]
 const tspend_sigscript_size int = 1 + 65 + 1 + 33
 
+func readPrivKey() (string, error) {
+	var pk []byte
+	var err error
+	fd := int(os.Stdin.Fd())
+	if terminal.IsTerminal(fd) {
+		fmt.Print("Input the private key: ")
+		pk, err = terminal.ReadPassword(fd)
+	} else {
+		r := bufio.NewReader(os.Stdin)
+		pk, err = r.ReadBytes('\n')
+		if err == io.EOF {
+			err = nil
+		}
+	}
+	return strings.TrimSpace(string(pk)), err
+}
+
 func genTspend(cfg *config, ctx context.Context) error {
 	chainParams := cfg.chainParams
-	relayFee := DefaultRelayFeePerKb // TODO: configure?
+	relayFee := dcrutil.Amount(cfg.FeeRate)
 
 	var c *rpcclient.Client
 	var err error
@@ -48,16 +70,6 @@ func genTspend(cfg *config, ctx context.Context) error {
 		expiry = blockchain.CalculateTSpendExpiry(int64(bestHeight+1),
 			chainParams.TreasuryVoteInterval,
 			chainParams.TreasuryVoteIntervalMultiplier)
-	} else {
-		// Verify the expiry falls in the correct place and warn if
-		// not.
-		wantExpiry := blockchain.CalculateTSpendExpiry(int64(expiry),
-			chainParams.TreasuryVoteInterval,
-			chainParams.TreasuryVoteIntervalMultiplier)
-		if wantExpiry != expiry {
-			log.Warnf("Expiry not correct! want=%d got=%d",
-				wantExpiry, expiry)
-		}
 	}
 
 	// Figure out the OP_RETURN script.
@@ -142,8 +154,17 @@ func genTspend(cfg *config, ctx context.Context) error {
 	// Fill in the value in with the fee.
 	msgTx.TxIn[0].ValueIn = totalPayout + int64(fee)
 
+	// Read priv key from stdin if needed.
+	privKeyHex := cfg.PrivKey
+	if cfg.privKeyFromStdin() {
+		privKeyHex, err = readPrivKey()
+		if err != nil {
+			return err
+		}
+	}
+
 	// Calculate TSpend signature without SigHashType.
-	privKeyBytes, err := hex.DecodeString(cfg.PrivKey)
+	privKeyBytes, err := hex.DecodeString(privKeyHex)
 	if err != nil {
 		return err
 	}
