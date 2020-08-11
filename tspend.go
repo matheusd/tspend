@@ -5,10 +5,12 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/csv"
 	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/davecgh/go-spew/spew"
@@ -73,6 +75,84 @@ func zeroBytes(s []byte) {
 	}
 }
 
+type payout struct {
+	address dcrutil.Address
+	amount  int64
+}
+
+func payoutsFromCSV(cfg *config) ([]*payout, error) {
+	var payouts []*payout
+	f, err := os.Open(cfg.CSV)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	r := csv.NewReader(f)
+	for i := 0; ; i++ {
+		record, err := r.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		if len(record) != 2 {
+			return nil, fmt.Errorf("record %d does not have 2 elements (%d)",
+				i, len(record))
+		}
+
+		// Decode address.
+		addr, err := dcrutil.DecodeAddress(record[0], cfg.chainParams)
+		if err != nil {
+			return nil, fmt.Errorf("record %d[0] is not an address: %v",
+				i, err)
+		}
+
+		amt, err := strconv.ParseInt(record[1], 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("record %d[1] is not an amount: %v",
+				i, err)
+		}
+
+		payouts = append(payouts, &payout{
+			address: addr,
+			amount:  amt,
+		})
+	}
+
+	return payouts, nil
+}
+
+func payoutsFromCfg(cfg *config) ([]*payout, error) {
+	payouts := make([]*payout, 0, len(cfg.Addresses))
+
+	for i, encodedAddr := range cfg.Addresses {
+		amt := cfg.Amounts[i]
+
+		// Decode address.
+		addr, err := dcrutil.DecodeAddress(encodedAddr, cfg.chainParams)
+		if err != nil {
+			return nil, err
+		}
+
+		payouts = append(payouts, &payout{
+			address: addr,
+			amount:  amt,
+		})
+	}
+	return payouts, nil
+}
+
+func loadPayouts(cfg *config) ([]*payout, error) {
+	if cfg.CSV != "" {
+		return payoutsFromCSV(cfg)
+	}
+
+	return payoutsFromCfg(cfg)
+}
+
 func genTspend(cfg *config, ctx context.Context) error {
 	chainParams := cfg.chainParams
 	relayFee := dcrutil.Amount(cfg.FeeRate)
@@ -112,6 +192,13 @@ func genTspend(cfg *config, ctx context.Context) error {
 		return err
 	}
 
+	// Load the payouts.
+	var totalPayout int64
+	payouts, err := loadPayouts(cfg)
+	if err != nil {
+		return err
+	}
+
 	builder := txscript.NewScriptBuilder()
 	builder.AddOp(txscript.OP_RETURN)
 	builder.AddData(randPayload)
@@ -127,33 +214,23 @@ func genTspend(cfg *config, ctx context.Context) error {
 	msgTx.AddTxOut(wire.NewTxOut(0, opretScript))
 
 	// Generate OP_TGENs outputs and calculate totals.
-	var totalPayout int64
-	for i, encodedAddr := range cfg.Addresses {
-		amt := cfg.Amounts[i]
-
-		// While looping calculate total amount
-		totalPayout += amt
-
-		// Decode address.
-		addr, err := dcrutil.DecodeAddress(encodedAddr, chainParams)
-		if err != nil {
-			return err
-		}
+	for _, payout := range payouts {
+		totalPayout += payout.amount
 
 		// Create OP_TGEN prefixed script.
-		p2ahs, err := txscript.PayToAddrScript(addr)
+		p2ahs, err := txscript.PayToAddrScript(payout.address)
 		if err != nil {
 			return fmt.Errorf("Error generating script for addr %s: %v",
-				encodedAddr, err)
+				payout.address.Address(), err)
 		}
 		script := make([]byte, len(p2ahs)+1)
 		script[0] = txscript.OP_TGEN
 		copy(script[1:], p2ahs)
 
-		txOut := wire.NewTxOut(int64(amt), script)
+		txOut := wire.NewTxOut(payout.amount, script)
 		if err := CheckOutput(txOut, relayFee); err != nil {
 			log.Warnf("Output %s (%d atoms) failed check: %v",
-				encodedAddr, amt, err)
+				payout.address.Address(), payout.amount, err)
 		}
 
 		// Add to transaction.
