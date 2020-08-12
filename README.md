@@ -45,3 +45,21 @@ Figure out the needed expiry for some block height.
 ```shell
 go run ./expiryfor --simnet 240
 ```
+
+## Config File
+
+Add it to `~/.tspend/tspend.conf`:
+
+```ini
+[Application Options]
+
+; Change the network
+; testnet = 1
+; simnet = 1
+
+; Change the default fee rate of 10000
+; feerate = 20000
+
+; Change the privkeyfile used
+; privkeyfile = ~/.tspend/[network].key
+
