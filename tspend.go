@@ -325,26 +325,29 @@ func genTspend(cfg *config, ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Raw TSPend:\n%x\n\n", rawTx)
-	if cfg.Spew {
-		spew.Dump(msgTx)
-		fmt.Println("")
-	}
+	fmt.Printf("%x\n", rawTx)
 
 	// Debug stuff.
+	debugf := func(format string, args ...interface{}) {
+		log.Infof(format, args...)
+	}
+
+	if cfg.Spew {
+		debugf("%s", spew.Sdump(msgTx))
+	}
+
 	tvi := chainParams.TreasuryVoteInterval
 	mul := chainParams.TreasuryVoteIntervalMultiplier
 	start, _ := blockchain.CalculateTSpendWindowStart(expiry, tvi, mul)
 	end, _ := blockchain.CalculateTSpendWindowEnd(expiry, tvi)
 
-	fmt.Printf("TSpend Hash: %s\n", msgTx.TxHash())
-	fmt.Printf("TSpend PubKey: %x\n", pubKeyBytes)
-	fmt.Printf("Expiry: %d\n", expiry)
-	fmt.Printf("Voting interval: %d - %d\n", start, end)
-	fmt.Printf("Total output amount: %s\n", dcrutil.Amount(totalPayout))
-	fmt.Printf("Total tx size: %d bytes\n", estimatedSize)
-	fmt.Printf("Total fees: %s\n", dcrutil.Amount(fee))
-	fmt.Println("")
+	debugf("TSpend Hash: %s", msgTx.TxHash())
+	debugf("TSpend PubKey: %x", pubKeyBytes)
+	debugf("Expiry: %d", expiry)
+	debugf("Voting interval: %d - %d", start, end)
+	debugf("Total output amount: %s", dcrutil.Amount(totalPayout))
+	debugf("Total tx size: %d bytes", estimatedSize)
+	debugf("Total fees: %s", dcrutil.Amount(fee))
 
 	if !foundPiKey {
 		log.Warnf("Private key does not correspond to a public Pi Key " +
