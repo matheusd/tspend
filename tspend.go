@@ -153,6 +153,53 @@ func loadPayouts(cfg *config) ([]*payout, error) {
 	return payoutsFromCfg(cfg)
 }
 
+func loadOpReturnScript(cfg *config) ([]byte, error) {
+	var err error
+	randPayload := make([]byte, chainhash.HashSize)
+	if cfg.OpReturnData != "" {
+		_, err = hex.Decode(randPayload, []byte(cfg.OpReturnData))
+	} else {
+		_, err = rand.Read(randPayload)
+	}
+	if err != nil {
+		return nil, err
+	}
+	builder := txscript.NewScriptBuilder()
+	builder.AddOp(txscript.OP_RETURN)
+	builder.AddData(randPayload)
+	return builder.Script()
+}
+
+func loadExpiry(cfg *config, c *rpcclient.Client, ctx context.Context) (uint32, error) {
+	// Use the specified expiry if provided.
+	if cfg.Expiry != 0 {
+		return uint32(cfg.Expiry), nil
+	}
+
+	// Otherwise, find one based on the current block (either the specified
+	// one or one from a dcrd instance).
+	currentHeight := int64(cfg.CurrentHeight)
+	if currentHeight == 0 {
+		bestHash, bestHeight, err := c.GetBestBlock(ctx)
+		if err != nil {
+			return 0, err
+		}
+		log.Debugf("Best block: Height %d Hash %s", bestHeight, bestHash)
+
+		currentHeight = int64(bestHeight)
+	}
+
+	// TODO: If too close to the start of the voting interval (i.e.
+	// currentHeight+1 % TVI > TVI - TVI/4 or something like that) then add
+	// a TVI-worth of blocks so the TSpend isn't broadcast too close to the
+	// start of the voting period.
+
+	expiry := blockchain.CalculateTSpendExpiry(int64(currentHeight+1),
+		cfg.chainParams.TreasuryVoteInterval,
+		cfg.chainParams.TreasuryVoteIntervalMultiplier)
+	return expiry, nil
+}
+
 func genTspend(cfg *config, ctx context.Context) error {
 	chainParams := cfg.chainParams
 	relayFee := dcrutil.Amount(cfg.FeeRate)
@@ -167,27 +214,14 @@ func genTspend(cfg *config, ctx context.Context) error {
 		return err
 	}
 
-	// Figure out the expiry if not commanded to use a specific one.
-	expiry := uint32(cfg.Expiry)
-	if expiry == 0 {
-		bestHash, bestHeight, err := c.GetBestBlock(ctx)
-		if err != nil {
-			return err
-		}
-		log.Debugf("Best block: Height %d Hash %s", bestHeight, bestHash)
-
-		expiry = blockchain.CalculateTSpendExpiry(int64(bestHeight+1),
-			chainParams.TreasuryVoteInterval,
-			chainParams.TreasuryVoteIntervalMultiplier)
+	// Figure out the expiry.
+	expiry, err := loadExpiry(cfg, c, ctx)
+	if err != nil {
+		return err
 	}
 
 	// Figure out the OP_RETURN script.
-	randPayload := make([]byte, chainhash.HashSize)
-	if cfg.OpReturnData != "" {
-		_, err = hex.Decode(randPayload, []byte(cfg.OpReturnData))
-	} else {
-		_, err = rand.Read(randPayload)
-	}
+	opretScript, err := loadOpReturnScript(cfg)
 	if err != nil {
 		return err
 	}
@@ -195,14 +229,6 @@ func genTspend(cfg *config, ctx context.Context) error {
 	// Load the payouts.
 	var totalPayout int64
 	payouts, err := loadPayouts(cfg)
-	if err != nil {
-		return err
-	}
-
-	builder := txscript.NewScriptBuilder()
-	builder.AddOp(txscript.OP_RETURN)
-	builder.AddData(randPayload)
-	opretScript, err := builder.Script()
 	if err != nil {
 		return err
 	}
@@ -294,6 +320,7 @@ func genTspend(cfg *config, ctx context.Context) error {
 		}
 	}
 
+	// Write the raw tx.
 	rawTx, err := msgTx.Bytes()
 	if err != nil {
 		return err
@@ -303,9 +330,17 @@ func genTspend(cfg *config, ctx context.Context) error {
 		spew.Dump(msgTx)
 		fmt.Println("")
 	}
+
+	// Debug stuff.
+	tvi := chainParams.TreasuryVoteInterval
+	mul := chainParams.TreasuryVoteIntervalMultiplier
+	start, _ := blockchain.CalculateTSpendWindowStart(expiry, tvi, mul)
+	end, _ := blockchain.CalculateTSpendWindowEnd(expiry, tvi)
+
 	fmt.Printf("TSpend Hash: %s\n", msgTx.TxHash())
 	fmt.Printf("TSpend PubKey: %x\n", pubKeyBytes)
 	fmt.Printf("Expiry: %d\n", expiry)
+	fmt.Printf("Voting interval: %d - %d\n", start, end)
 	fmt.Printf("Total output amount: %s\n", dcrutil.Amount(totalPayout))
 	fmt.Printf("Total tx size: %d bytes\n", estimatedSize)
 	fmt.Printf("Total fees: %s\n", dcrutil.Amount(fee))

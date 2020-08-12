@@ -35,11 +35,9 @@ echo "62deae1ab2b1ebd96a28c80e870aee325bed359e83d8db2464ef999e616a9eef" | ss enc
 # Using ss and passphrase encryption
 echo "62deae1ab2b1ebd96a28c80e870aee325bed359e83d8db2464ef999e616a9eef" | ss encrypt -passphase -out ~/.tspend/simnet.key
 
-# Generate a tspend while decrypting from the file.
-age -d simnet-pi-key.age | go run . --simnet \
-  --expiry 386 \
-  --address="SsinZEEYLHmyz3NXjijcJ2HFy6zvh4VyKLR" \
-  --amount 1063000000
+# Generate a tspend while decrypting from the standard privkeyfile for the
+# specified network. Also get values from a CSV and generate a sane expiry.
+go run . --simnet -c 151 --csv in.csv
 ```
 
 Figure out the needed expiry for some block height.

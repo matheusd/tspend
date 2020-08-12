@@ -131,7 +131,8 @@ func (c *config) dcrdConnConfig() *rpcclient.ConnConfig {
 // needsDcrd returns true if the config means the app will need to connect to
 // the dcrd instance.
 func (c *config) needsDcrd() bool {
-	return c.Expiry == 0 || c.Publish
+	needsBestHeight := c.Expiry == 0 && c.CurrentHeight == 0
+	return needsBestHeight || c.Publish
 }
 
 func (c *config) privKeyFromStdin() bool {
