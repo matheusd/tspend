@@ -189,14 +189,30 @@ func loadExpiry(cfg *config, c *rpcclient.Client, ctx context.Context) (uint32, 
 		currentHeight = int64(bestHeight)
 	}
 
-	// TODO: If too close to the start of the voting interval (i.e.
-	// currentHeight+1 % TVI > TVI - TVI/4 or something like that) then add
-	// a TVI-worth of blocks so the TSpend isn't broadcast too close to the
-	// start of the voting period.
+	tvi := cfg.chainParams.TreasuryVoteInterval
+	mul := cfg.chainParams.TreasuryVoteIntervalMultiplier
 
-	expiry := blockchain.CalculateTSpendExpiry(int64(currentHeight+1),
-		cfg.chainParams.TreasuryVoteInterval,
-		cfg.chainParams.TreasuryVoteIntervalMultiplier)
+	nextHeight := currentHeight + 1
+	log.Infof("Next block height: %d", nextHeight)
+
+	// If the current block is too close to the next TVI (which would imply
+	// the start of the vote is too close to the current block) advance
+	// into the next TVI to ease operational concerns about the moving the
+	// data and signed transaction across air-gapped computers, posting on
+	// Politeia for review and distributing across the node network, etc.
+	//
+	// We arbitrarily consider the height "too close" if it's less than 1/4
+	// of the way to reach the TVI.
+	blocksToTVI := int64(tvi) - (nextHeight % int64(tvi))
+	tooCloseThresh := int64(tvi / 4)
+	if blocksToTVI < tooCloseThresh {
+		nextHeight = nextHeight + blocksToTVI
+		log.Infof("Next block height too close to next TVI (%d blocks "+
+			"to TVI; thresh=%d). Using %d as next height.",
+			blocksToTVI, tooCloseThresh, nextHeight)
+	}
+
+	expiry := blockchain.CalculateTSpendExpiry(int64(nextHeight), tvi, mul)
 	return expiry, nil
 }
 

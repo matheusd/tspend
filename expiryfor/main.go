@@ -38,12 +38,27 @@ func main() {
 
 	fmt.Printf("Chain: %s TVI %d MUL %d\n", chain.Name, tvi, mul)
 
+	blocksToTVI := int64(tvi) - (height % int64(tvi))
+	tooCloseThresh := int64(tvi / 4)
+	isTooClose := blocksToTVI < tooCloseThresh
+
 	isTVI := blockchain.IsTreasuryVoteInterval(uint64(height), tvi)
 	expiry := blockchain.CalculateTSpendExpiry(height, tvi, mul)
 	start, _ := blockchain.CalculateTSpendWindowStart(expiry, tvi, mul)
 	end, _ := blockchain.CalculateTSpendWindowEnd(expiry, tvi)
 
 	fmt.Printf("Height %d: IsTVI: %v\n", height, isTVI)
+	fmt.Printf("To TVI: %d (thresh %d)\n", blocksToTVI, tooCloseThresh)
 	fmt.Printf("Expiry: %d\n", expiry)
 	fmt.Printf("Voting interval: %d - %d\n", start, end)
+	if isTooClose {
+		// Advance to following TVI.
+		height += blocksToTVI
+		expiry = blockchain.CalculateTSpendExpiry(height, tvi, mul)
+		start, _ = blockchain.CalculateTSpendWindowStart(expiry, tvi, mul)
+		end, _ = blockchain.CalculateTSpendWindowEnd(expiry, tvi)
+		fmt.Println("\nHeight too close to TVI. Advancing to next one.")
+		fmt.Printf("Expiry: %d\n", expiry)
+		fmt.Printf("Voting interval: %d - %d\n", start, end)
+	}
 }
