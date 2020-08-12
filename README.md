@@ -53,11 +53,14 @@ Amounts are specified in **ATOMS**.
 
 ```shell
 $ ... # rest of args
-  --address "SsnhVyWxY6c5xEztSBb9xBqf9gdjEHpyCDx" \
+  --address SsnhVyWxY6c5xEztSBb9xBqf9gdjEHpyCDx \
   --amount 1075000000  \
   --address SsXBReLhVK8NrzZcBsu1Dyo5KhD19rgEcEv \
   --amount 853000000 
  
+$ cat > input.csv
+SsnhVyWxY6c5xEztSBb9xBqf9gdjEHpyCDx,1075000000
+SsXBReLhVK8NrzZcBsu1Dyo5KhD19rgEcEv,853000000 
 
 $ ... # rest of args
   --csv input.csv
@@ -95,7 +98,7 @@ Add it to `~/.tspend/tspend.conf`:
 ; privkeyfile = ~/.tspend/[network].key
 
 ; Don't show debug info in stderr
-debuglevel = error
+; debuglevel = error
 ```
 
 ## Tests
