@@ -2,6 +2,8 @@
 
 Requires go > 1.13.
 
+## Quick Start
+
 ```shell
 #  Don't Panic
 $ go run . -h
@@ -26,7 +28,9 @@ $ go run . \
   --publish
 ```
 
-Using with an encrypted private key file. Requires [ss](https://github.com/jrick/ss).
+## Private Key Encryption using ss 
+
+Requires [ss](https://github.com/jrick/ss).
 
 ```shell
 # Using ss and PKI encryption
@@ -40,10 +44,37 @@ echo "62deae1ab2b1ebd96a28c80e870aee325bed359e83d8db2464ef999e616a9eef" | ss enc
 go run . --simnet -c 151 --csv in.csv
 ```
 
-Figure out the needed expiry for some block height.
+
+## Input/Output
+
+Input TSpend payouts via CLI args or a CSV file.
+
+Amounts are specified in **ATOMS**.
 
 ```shell
-go run ./expiryfor --simnet 240
+$ ... # rest of args
+  --address "SsnhVyWxY6c5xEztSBb9xBqf9gdjEHpyCDx" \
+  --amount 1075000000  \
+  --address SsXBReLhVK8NrzZcBsu1Dyo5KhD19rgEcEv \
+  --amount 853000000 
+ 
+
+$ ... # rest of args
+  --csv input.csv
+```
+
+Raw tx in hex format is output to stdout. Redirect to an output file or use 
+`--out` to save somewhere else. Use `--debuglevel` to tweak logging debug info.
+
+```shell
+$ ... # rest of args
+  > out.txt
+
+$ ... #rest of args
+  --out tspend.hex
+
+$ ... #rest of args
+  --debuglevel=debug
 ```
 
 ## Config File
@@ -62,4 +93,16 @@ Add it to `~/.tspend/tspend.conf`:
 
 ; Change the privkeyfile used
 ; privkeyfile = ~/.tspend/[network].key
+
+; Don't show debug info in stderr
+debuglevel = error
+```
+
+## Tests
+
+Figure out the needed expiry for some block height.
+
+```shell
+go run ./expiryfor --simnet 240
+```
 
