@@ -110,6 +110,7 @@ type config struct {
 	Addresses     []string `long:"address" description:"List of addresses to send to. Number of addresses must match amounts"`
 	Amounts       []int64  `long:"amount" description:"List of amounts to send in atoms. Number of amounts must match addresses"`
 	CSV           string   `long:"csv" description:"Generate the tspend based on a csv file"`
+	Out           string   `long:"out" description:"Write resulting hex tspend to the specified file"`
 	Spew          bool     `long:"spew" description:"Spew the result tspend"`
 
 	// The rest of the members of this struct are filled by loadConfig().

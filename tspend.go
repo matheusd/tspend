@@ -325,7 +325,17 @@ func genTspend(cfg *config, ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%x\n", rawTx)
+
+	if cfg.Out != "" {
+		f, err := os.Create(cfg.Out)
+		if err != nil {
+			return fmt.Errorf("error creating output file: %v", err)
+		}
+		fmt.Fprintf(f, "%x\n", rawTx)
+		f.Close()
+	} else {
+		fmt.Printf("%x\n", rawTx)
+	}
 
 	// Debug stuff.
 	debugf := func(format string, args ...interface{}) {
