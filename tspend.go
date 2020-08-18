@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/csv"
 	"encoding/hex"
 	"fmt"
@@ -153,13 +154,18 @@ func loadPayouts(cfg *config) ([]*payout, error) {
 	return payoutsFromCfg(cfg)
 }
 
-func loadOpReturnScript(cfg *config) ([]byte, error) {
+func loadOpReturnScript(cfg *config, totalPayout uint64) ([]byte, error) {
 	var err error
 	randPayload := make([]byte, chainhash.HashSize)
+
+	// Encode the total payout.
+	binary.LittleEndian.PutUint64(randPayload, totalPayout)
+
+	// Read the random data.
 	if cfg.OpReturnData != "" {
-		_, err = hex.Decode(randPayload, []byte(cfg.OpReturnData))
+		_, err = hex.Decode(randPayload[8:], []byte(cfg.OpReturnData))
 	} else {
-		_, err = rand.Read(randPayload)
+		_, err = rand.Read(randPayload[8:])
 	}
 	if err != nil {
 		return nil, err
@@ -236,12 +242,6 @@ func genTspend(cfg *config, ctx context.Context) error {
 		return err
 	}
 
-	// Figure out the OP_RETURN script.
-	opretScript, err := loadOpReturnScript(cfg)
-	if err != nil {
-		return err
-	}
-
 	// Load the payouts.
 	var totalPayout int64
 	payouts, err := loadPayouts(cfg)
@@ -253,7 +253,12 @@ func genTspend(cfg *config, ctx context.Context) error {
 	msgTx := wire.NewMsgTx()
 	msgTx.Version = wire.TxVersionTreasury
 	msgTx.Expiry = expiry
-	msgTx.AddTxOut(wire.NewTxOut(0, opretScript))
+
+	// Create the opreturn txout with a pseudo script of the right size so
+	// we can estimate the fee later on. The script is:
+	// OP_RETURN OP_DATA_32 [32 byte data]
+	var emptyOpRetScript [1 + 1 + 32]byte
+	msgTx.AddTxOut(wire.NewTxOut(0, emptyOpRetScript[:]))
 
 	// Generate OP_TGENs outputs and calculate totals.
 	for _, payout := range payouts {
@@ -300,7 +305,14 @@ func genTspend(cfg *config, ctx context.Context) error {
 	fee := FeeForSerializeSize(relayFee, estimatedSize)
 
 	// Fill in the value in with the fee.
-	msgTx.TxIn[0].ValueIn = totalPayout + int64(fee)
+	valueInAmt := totalPayout + int64(fee)
+	msgTx.TxIn[0].ValueIn = valueInAmt
+
+	// Figure out the real OP_RETURN script that encodes the value in.
+	msgTx.TxOut[0].PkScript, err = loadOpReturnScript(cfg, uint64(valueInAmt))
+	if err != nil {
+		return err
+	}
 
 	// Load the priv key.
 	var privKeyBytes [32]byte
