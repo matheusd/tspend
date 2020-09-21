@@ -248,6 +248,9 @@ func genTspend(cfg *config, ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if len(payouts) == 0 {
+		return fmt.Errorf("at least one payout must be specified")
+	}
 
 	// Start building the TSpend Tx.
 	msgTx := wire.NewMsgTx()
