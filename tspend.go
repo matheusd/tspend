@@ -218,7 +218,7 @@ func loadExpiry(cfg *config, c *rpcclient.Client, ctx context.Context) (uint32, 
 			blocksToTVI, tooCloseThresh, nextHeight)
 	}
 
-	expiry := blockchain.CalculateTSpendExpiry(int64(nextHeight), tvi, mul)
+	expiry := blockchain.CalcTSpendExpiry(int64(nextHeight), tvi, mul)
 	return expiry, nil
 }
 
@@ -379,8 +379,7 @@ func genTspend(cfg *config, ctx context.Context) error {
 
 	tvi := chainParams.TreasuryVoteInterval
 	mul := chainParams.TreasuryVoteIntervalMultiplier
-	start, _ := blockchain.CalculateTSpendWindowStart(expiry, tvi, mul)
-	end, _ := blockchain.CalculateTSpendWindowEnd(expiry, tvi)
+	start, end, _ := blockchain.CalcTSpendWindow(expiry, tvi, mul)
 
 	debugf("TSpend Hash: %s", msgTx.TxHash())
 	debugf("TSpend PubKey: %x", pubKeyBytes)
