@@ -92,11 +92,12 @@ type config struct {
 
 	// Dcrd Connection Options
 
-	DcrdConnect   string `long:"dcrdconnect" description:"Network address of the RPC interface of the dcrd node to connect to (default: localhost port 9109, testnet: 19109, simnet: 19556)"`
-	DcrdCertPath  string `long:"dcrdcertpath" description:"File path location of the dcrd RPC certificate"`
-	DcrdCertBytes string `long:"dcrdcertbytes" description:"The pem-encoded RPC certificate for dcrd"`
-	DcrdUser      string `short:"u" long:"dcrduser" description:"RPC username to authenticate with dcrd"`
-	DcrdPass      string `short:"P" long:"dcrdpass" description:"RPC password to authenticate with dcrd"`
+	DcrdConnect         string `long:"dcrdconnect" description:"Network address of the RPC interface of the dcrd node to connect to (default: localhost port 9109, testnet: 19109, simnet: 19556)"`
+	DcrdCertPath        string `long:"dcrdcertpath" description:"File path location of the dcrd RPC certificate"`
+	DcrdCertBytes       string `long:"dcrdcertbytes" description:"The pem-encoded RPC certificate for dcrd"`
+	DcrdUser            string `short:"u" long:"dcrduser" description:"RPC username to authenticate with dcrd"`
+	DcrdPass            string `short:"P" long:"dcrdpass" description:"RPC password to authenticate with dcrd"`
+	IgnoreRPCVersionErr bool   `long:"ignoredcrdrpcversionerr" description:"Ignore error when dcrd version is different than required by the tool. WARNING: this might cause undefined behavior."`
 
 	// TSpend data
 
@@ -376,7 +377,7 @@ func loadConfig() (*config, []string, error) {
 		dcrdCfg := cfg.dcrdConnConfig()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		err = CheckDcrd(ctx, dcrdCfg, cfg.chainParams)
+		err = CheckDcrd(ctx, dcrdCfg, cfg.chainParams, cfg.IgnoreRPCVersionErr)
 		if err != nil {
 			return nil, nil, fmt.Errorf("error while checking underlying "+
 				"dcrd: %v", err)

@@ -27,7 +27,9 @@ var (
 // elements for running the dcrros server.
 //
 // This method returns the version string reported by the dcrd instance.
-func checkDcrd(ctx context.Context, c *rpcclient.Client, chain *chaincfg.Params) (string, error) {
+func checkDcrd(ctx context.Context, c *rpcclient.Client,
+	chain *chaincfg.Params, ignoreRpcVersionErr bool) (string, error) {
+
 	info, err := c.GetBlockChainInfo(ctx)
 	if err != nil {
 		return "", fmt.Errorf("unable to get blockchain info from dcrd: %v", err)
@@ -47,9 +49,14 @@ func checkDcrd(ctx context.Context, c *rpcclient.Client, chain *chaincfg.Params)
 		return "", fmt.Errorf("dcrd did not provide the 'dcrdjsonrpcapi' version")
 	}
 	if rpcVersion.Major != wantJsonRpcMajor || rpcVersion.Minor < wantJsonRpcMinor {
-		return "", fmt.Errorf("dcrd running on unsupported rpcjson version "+
+		err := fmt.Errorf("dcrd running on unsupported rpcjson version "+
 			"(want %d.%d got %s)", wantJsonRpcMajor,
 			wantJsonRpcMinor, rpcVersion.VersionString)
+		if !ignoreRpcVersionErr {
+			return "", err
+		}
+
+		log.Warnf("%v - ignoring error as comanded", err)
 	}
 
 	dcrdVersion, ok := version["dcrd"]
@@ -67,7 +74,7 @@ func checkDcrd(ctx context.Context, c *rpcclient.Client, chain *chaincfg.Params)
 // chain after a restart) so this is only offered as a helper for early testing
 // during process startup for easier error reporting.
 func CheckDcrd(ctx context.Context, connCfg *rpcclient.ConnConfig,
-	chainParams *chaincfg.Params) error {
+	chainParams *chaincfg.Params, ignoreRpcVersionErr bool) error {
 
 	// We make a copy of the passed config because we change some of the
 	// parameters locally to ensure they are configured as needed by the
@@ -85,7 +92,7 @@ func CheckDcrd(ctx context.Context, connCfg *rpcclient.ConnConfig,
 		return err
 	}
 
-	_, err = checkDcrd(ctx, c, chainParams)
+	_, err = checkDcrd(ctx, c, chainParams, ignoreRpcVersionErr)
 	c.Disconnect()
 	return err
 }
