@@ -101,18 +101,18 @@ type config struct {
 
 	// TSpend data
 
-	FeeRate       int64    `long:"feerate" description:"Fee rate for the tspend in atoms/kB"`
-	PrivKey       string   `long:"privkey" description:"Private key to use to sign tspend"`
-	PrivKeyFile   string   `long:"privkeyfile" description:"Private key file to use to sign tspend"`
-	OpReturnData  string   `long:"opreturndata" description:"OP_RETURN payload data. Random data if unspencified"`
-	Publish       bool     `long:"publish" description:"Directly publish the tspend"`
-	Expiry        int      `long:"expiry" description:"Expiry to use"`
-	CurrentHeight int      `short:"c" long:"currentheight" description:"Current blockchain height to calculate a sane expiry from"`
-	Addresses     []string `long:"address" description:"List of addresses to send to. Number of addresses must match amounts"`
-	Amounts       []int64  `long:"amount" description:"List of amounts to send in atoms. Number of amounts must match addresses"`
-	CSV           string   `long:"csv" description:"Generate the tspend based on a csv file"`
-	Out           string   `long:"out" description:"Write resulting hex tspend to the specified file"`
-	Spew          bool     `long:"spew" description:"Spew the result tspend"`
+	FeeRate       int64     `long:"feerate" description:"Fee rate for the tspend in atoms/kB"`
+	PrivKey       string    `long:"privkey" description:"Private key to use to sign tspend"`
+	PrivKeyFile   string    `long:"privkeyfile" description:"Private key file to use to sign tspend"`
+	OpReturnData  string    `long:"opreturndata" description:"OP_RETURN payload data. Random data if unspencified"`
+	Publish       bool      `long:"publish" description:"Directly publish the tspend"`
+	Expiry        int       `long:"expiry" description:"Expiry to use"`
+	CurrentHeight int       `short:"c" long:"currentheight" description:"Current blockchain height to calculate a sane expiry from"`
+	Addresses     []string  `long:"address" description:"List of addresses to send to. Number of addresses must match amounts"`
+	Amounts       []float64 `long:"amount" description:"List of amounts to send in DCR. Number of amounts must match addresses"`
+	CSV           string    `long:"csv" description:"Generate the tspend based on a csv file"`
+	Out           string    `long:"out" description:"Write resulting hex tspend to the specified file"`
+	Spew          bool      `long:"spew" description:"Spew the result tspend"`
 
 	// The rest of the members of this struct are filled by loadConfig().
 

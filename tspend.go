@@ -78,7 +78,7 @@ func zeroBytes(s []byte) {
 
 type payout struct {
 	address dcrutil.Address
-	amount  int64
+	amount  dcrutil.Amount
 }
 
 func payoutsFromCSV(cfg *config) ([]*payout, error) {
@@ -111,10 +111,15 @@ func payoutsFromCSV(cfg *config) ([]*payout, error) {
 				i, err)
 		}
 
-		amt, err := strconv.ParseInt(record[1], 10, 64)
+		amtFloat, err := strconv.ParseFloat(record[1], 64)
 		if err != nil {
-			return nil, fmt.Errorf("record %d[1] is not an amount: %v",
+			return nil, fmt.Errorf("record %d[1] is not a float: %v",
 				i, err)
+		}
+		amt, err := dcrutil.NewAmount(amtFloat)
+		if err != nil {
+			return nil, fmt.Errorf("record %d[1] is not a dcr "+
+				"amount: %v", i, err)
 		}
 
 		payouts = append(payouts, &payout{
@@ -130,7 +135,11 @@ func payoutsFromCfg(cfg *config) ([]*payout, error) {
 	payouts := make([]*payout, 0, len(cfg.Addresses))
 
 	for i, encodedAddr := range cfg.Addresses {
-		amt := cfg.Amounts[i]
+		amtFloat := cfg.Amounts[i]
+		amt, err := dcrutil.NewAmount(amtFloat)
+		if err != nil {
+			return nil, err
+		}
 
 		// Decode address.
 		addr, err := dcrutil.DecodeAddress(encodedAddr, cfg.chainParams)
@@ -243,7 +252,7 @@ func genTspend(cfg *config, ctx context.Context) error {
 	}
 
 	// Load the payouts.
-	var totalPayout int64
+	var totalPayout dcrutil.Amount
 	payouts, err := loadPayouts(cfg)
 	if err != nil {
 		return err
@@ -277,7 +286,7 @@ func genTspend(cfg *config, ctx context.Context) error {
 		script[0] = txscript.OP_TGEN
 		copy(script[1:], p2ahs)
 
-		txOut := wire.NewTxOut(payout.amount, script)
+		txOut := wire.NewTxOut(int64(payout.amount), script)
 		if err := CheckOutput(txOut, relayFee); err != nil {
 			log.Warnf("Output %s (%d atoms) failed check: %v",
 				payout.address.Address(), payout.amount, err)
@@ -308,8 +317,8 @@ func genTspend(cfg *config, ctx context.Context) error {
 	fee := FeeForSerializeSize(relayFee, estimatedSize)
 
 	// Fill in the value in with the fee.
-	valueInAmt := totalPayout + int64(fee)
-	msgTx.TxIn[0].ValueIn = valueInAmt
+	valueInAmt := totalPayout + fee
+	msgTx.TxIn[0].ValueIn = int64(valueInAmt)
 
 	// Figure out the real OP_RETURN script that encodes the value in.
 	msgTx.TxOut[0].PkScript, err = loadOpReturnScript(cfg, uint64(valueInAmt))
@@ -385,7 +394,7 @@ func genTspend(cfg *config, ctx context.Context) error {
 	debugf("TSpend PubKey: %x", pubKeyBytes)
 	debugf("Expiry: %d", expiry)
 	debugf("Voting interval: %d - %d", start, end)
-	debugf("Total output amount: %s", dcrutil.Amount(totalPayout))
+	debugf("Total output amount: %s", totalPayout)
 	debugf("Total tx size: %d bytes", estimatedSize)
 	debugf("Total fees: %s", dcrutil.Amount(fee))
 
