@@ -92,26 +92,27 @@ type config struct {
 
 	// Dcrd Connection Options
 
-	DcrdConnect   string `long:"dcrdconnect" description:"Network address of the RPC interface of the dcrd node to connect to (default: localhost port 9109, testnet: 19109, simnet: 19556)"`
-	DcrdCertPath  string `long:"dcrdcertpath" description:"File path location of the dcrd RPC certificate"`
-	DcrdCertBytes string `long:"dcrdcertbytes" description:"The pem-encoded RPC certificate for dcrd"`
-	DcrdUser      string `short:"u" long:"dcrduser" description:"RPC username to authenticate with dcrd"`
-	DcrdPass      string `short:"P" long:"dcrdpass" description:"RPC password to authenticate with dcrd"`
+	DcrdConnect         string `long:"dcrdconnect" description:"Network address of the RPC interface of the dcrd node to connect to (default: localhost port 9109, testnet: 19109, simnet: 19556)"`
+	DcrdCertPath        string `long:"dcrdcertpath" description:"File path location of the dcrd RPC certificate"`
+	DcrdCertBytes       string `long:"dcrdcertbytes" description:"The pem-encoded RPC certificate for dcrd"`
+	DcrdUser            string `short:"u" long:"dcrduser" description:"RPC username to authenticate with dcrd"`
+	DcrdPass            string `short:"P" long:"dcrdpass" description:"RPC password to authenticate with dcrd"`
+	IgnoreRPCVersionErr bool   `long:"ignoredcrdrpcversionerr" description:"Ignore error when dcrd version is different than required by the tool. WARNING: this might cause undefined behavior."`
 
 	// TSpend data
 
-	FeeRate       int64    `long:"feerate" description:"Fee rate for the tspend in atoms/kB"`
-	PrivKey       string   `long:"privkey" description:"Private key to use to sign tspend"`
-	PrivKeyFile   string   `long:"privkeyfile" description:"Private key file to use to sign tspend"`
-	OpReturnData  string   `long:"opreturndata" description:"OP_RETURN payload data. Random data if unspencified"`
-	Publish       bool     `long:"publish" description:"Directly publish the tspend"`
-	Expiry        int      `long:"expiry" description:"Expiry to use"`
-	CurrentHeight int      `short:"c" long:"currentheight" description:"Current blockchain height to calculate a sane expiry from"`
-	Addresses     []string `long:"address" description:"List of addresses to send to. Number of addresses must match amounts"`
-	Amounts       []int64  `long:"amount" description:"List of amounts to send in atoms. Number of amounts must match addresses"`
-	CSV           string   `long:"csv" description:"Generate the tspend based on a csv file"`
-	Out           string   `long:"out" description:"Write resulting hex tspend to the specified file"`
-	Spew          bool     `long:"spew" description:"Spew the result tspend"`
+	FeeRate       int64     `long:"feerate" description:"Fee rate for the tspend in atoms/kB"`
+	PrivKey       string    `long:"privkey" description:"Private key to use to sign tspend"`
+	PrivKeyFile   string    `long:"privkeyfile" description:"Private key file to use to sign tspend"`
+	OpReturnData  string    `long:"opreturndata" description:"OP_RETURN payload data. Random data if unspencified"`
+	Publish       bool      `long:"publish" description:"Directly publish the tspend"`
+	Expiry        int       `long:"expiry" description:"Expiry to use"`
+	CurrentHeight int       `short:"c" long:"currentheight" description:"Current blockchain height to calculate a sane expiry from"`
+	Addresses     []string  `long:"address" description:"List of addresses to send to. Number of addresses must match amounts"`
+	Amounts       []float64 `long:"amount" description:"List of amounts to send in DCR. Number of amounts must match addresses"`
+	CSV           string    `long:"csv" description:"Generate the tspend based on a csv file"`
+	Out           string    `long:"out" description:"Write resulting hex tspend to the specified file"`
+	Spew          bool      `long:"spew" description:"Spew the result tspend"`
 
 	// The rest of the members of this struct are filled by loadConfig().
 
@@ -376,7 +377,7 @@ func loadConfig() (*config, []string, error) {
 		dcrdCfg := cfg.dcrdConnConfig()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		err = CheckDcrd(ctx, dcrdCfg, cfg.chainParams)
+		err = CheckDcrd(ctx, dcrdCfg, cfg.chainParams, cfg.IgnoreRPCVersionErr)
 		if err != nil {
 			return nil, nil, fmt.Errorf("error while checking underlying "+
 				"dcrd: %v", err)
