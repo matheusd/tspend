@@ -15,12 +15,14 @@ import (
 	"strings"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/decred/dcrd/blockchain/stake/v3"
+	"github.com/decred/dcrd/blockchain/stake/v4"
 	blockchain "github.com/decred/dcrd/blockchain/standalone/v2"
 	"github.com/decred/dcrd/chaincfg/chainhash"
-	"github.com/decred/dcrd/dcrutil/v3"
-	"github.com/decred/dcrd/rpcclient/v6"
-	"github.com/decred/dcrd/txscript/v3"
+	"github.com/decred/dcrd/dcrutil/v4"
+	"github.com/decred/dcrd/rpcclient/v7"
+	"github.com/decred/dcrd/txscript/v4"
+	"github.com/decred/dcrd/txscript/v4/sign"
+	"github.com/decred/dcrd/txscript/v4/stdaddr"
 	"github.com/decred/dcrd/wire"
 	"golang.org/x/crypto/ssh/terminal"
 )
@@ -77,7 +79,7 @@ func zeroBytes(s []byte) {
 }
 
 type payout struct {
-	address dcrutil.Address
+	address stdaddr.StakeAddress
 	amount  dcrutil.Amount
 }
 
@@ -105,10 +107,15 @@ func payoutsFromCSV(cfg *config) ([]*payout, error) {
 		}
 
 		// Decode address.
-		addr, err := dcrutil.DecodeAddress(record[0], cfg.chainParams)
+		addr, err := stdaddr.DecodeAddress(record[0], cfg.chainParams)
 		if err != nil {
 			return nil, fmt.Errorf("record %d[0] is not an address: %v",
 				i, err)
+		}
+		stakeAddr, ok := addr.(stdaddr.StakeAddress)
+		if !ok {
+			return nil, fmt.Errorf("record %d[0] is not a stakeable "+
+				"address (%T)", i, addr)
 		}
 
 		amtFloat, err := strconv.ParseFloat(record[1], 64)
@@ -123,7 +130,7 @@ func payoutsFromCSV(cfg *config) ([]*payout, error) {
 		}
 
 		payouts = append(payouts, &payout{
-			address: addr,
+			address: stakeAddr,
 			amount:  amt,
 		})
 	}
@@ -142,13 +149,18 @@ func payoutsFromCfg(cfg *config) ([]*payout, error) {
 		}
 
 		// Decode address.
-		addr, err := dcrutil.DecodeAddress(encodedAddr, cfg.chainParams)
+		addr, err := stdaddr.DecodeAddress(encodedAddr, cfg.chainParams)
 		if err != nil {
 			return nil, err
 		}
+		stakeAddr, ok := addr.(stdaddr.StakeAddress)
+		if !ok {
+			return nil, fmt.Errorf("address %d is not a stakeable "+
+				"address (%T)", i, addr)
+		}
 
 		payouts = append(payouts, &payout{
-			address: addr,
+			address: stakeAddr,
 			amount:  amt,
 		})
 	}
@@ -277,19 +289,16 @@ func genTspend(cfg *config, ctx context.Context) error {
 		totalPayout += payout.amount
 
 		// Create OP_TGEN prefixed script.
-		p2ahs, err := txscript.PayToAddrScript(payout.address)
-		if err != nil {
-			return fmt.Errorf("Error generating script for addr %s: %v",
-				payout.address.Address(), err)
-		}
-		script := make([]byte, len(p2ahs)+1)
-		script[0] = txscript.OP_TGEN
-		copy(script[1:], p2ahs)
+		version, script := payout.address.PayFromTreasuryScript()
 
-		txOut := wire.NewTxOut(int64(payout.amount), script)
+		txOut := &wire.TxOut{
+			Value:    int64(payout.amount),
+			Version:  version,
+			PkScript: script,
+		}
 		if err := CheckOutput(txOut, relayFee); err != nil {
 			log.Warnf("Output %s (%d atoms) failed check: %v",
-				payout.address.Address(), payout.amount, err)
+				payout.address.String(), payout.amount, err)
 		}
 
 		// Add to transaction.
@@ -334,7 +343,7 @@ func genTspend(cfg *config, ctx context.Context) error {
 
 	// Calculate TSpend signature without SigHashType. Zero out the
 	// privKeyBytes afterwards as they won't be needed anymore.
-	sigscript, err := txscript.TSpendSignatureScript(msgTx, privKeyBytes[:])
+	sigscript, err := sign.TSpendSignatureScript(msgTx, privKeyBytes[:])
 	zeroBytes(privKeyBytes[:])
 	if err != nil {
 		return err

@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/decred/dcrd/chaincfg/v3"
-	"github.com/decred/dcrd/rpcclient/v6"
+	"github.com/decred/dcrd/rpcclient/v7"
 )
 
 const (
@@ -14,8 +14,8 @@ const (
 	// instance should be running on. These are interpreted according to
 	// semver, so any difference in major versions causes an error while we
 	// accept any minor version greater than or equal to the minimum.
-	wantJsonRpcMajor uint32 = 6
-	wantJsonRpcMinor uint32 = 1
+	wantJsonRpcMajor uint32 = 7
+	wantJsonRpcMinor uint32 = 0
 )
 
 var (
