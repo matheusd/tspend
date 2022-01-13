@@ -109,3 +109,10 @@ Figure out the needed expiry for some block height.
 go run ./expiryfor --simnet 240
 ```
 
+## Voting Progress
+
+Show voting progress for TSpends in the mempool:
+
+```shell
+go run ./voteprogress --simnet -u USER -P PASS
+```
