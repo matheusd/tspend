@@ -1,6 +1,6 @@
 # Create Treasury TSpends
 
-Requires go > 1.13.
+Requires go >= 1.16.
 
 ## Quick Start
 
@@ -14,7 +14,7 @@ $ go run . \
   --simnet \
   --privkey "62deae1ab2b1ebd96a28c80e870aee325bed359e83d8db2464ef999e616a9eef" \
   --address "SsnhVyWxY6c5xEztSBb9xBqf9gdjEHpyCDx" \
-  --amount 1075000000 \
+  --amount 10.75000000 \
   --expiry 386
 
 # Generate and publish a TSpend for simnet
@@ -24,7 +24,7 @@ $ go run . \
   -u USER -P PASS \
   --privkey "62deae1ab2b1ebd96a28c80e870aee325bed359e83d8db2464ef999e616a9eef" \
   --address "SsnhVyWxY6c5xEztSBb9xBqf9gdjEHpyCDx" \
-  --amount 1075000000 \
+  --amount 10.75000000 \
   --publish
 ```
 
@@ -49,14 +49,14 @@ go run . --simnet -c 151 --csv in.csv
 
 Input TSpend payouts via CLI args or a CSV file.
 
-Amounts are specified in **ATOMS**.
+Amounts are specified in **DCR**.
 
 ```shell
 $ ... # rest of args
   --address SsnhVyWxY6c5xEztSBb9xBqf9gdjEHpyCDx \
-  --amount 1075000000  \
+  --amount 10.75000000  \
   --address SsXBReLhVK8NrzZcBsu1Dyo5KhD19rgEcEv \
-  --amount 853000000 
+  --amount 8.53000000 
  
 $ cat > input.csv
 SsnhVyWxY6c5xEztSBb9xBqf9gdjEHpyCDx,1075000000
