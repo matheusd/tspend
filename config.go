@@ -22,7 +22,7 @@ import (
 var appName = "tspend"
 
 func version() string {
-	return "0.1.0"
+	return "0.1.1"
 }
 
 type chainNetwork string
@@ -113,6 +113,8 @@ type config struct {
 	CSV           string    `long:"csv" description:"Generate the tspend based on a csv file"`
 	Out           string    `long:"out" description:"Write resulting hex tspend to the specified file"`
 	Spew          bool      `long:"spew" description:"Spew the result tspend"`
+
+	DeterministicOpReturn bool `long:"deterministic" description:"Use a deterministic OP_RETURN data based on the input payloads"`
 
 	// The rest of the members of this struct are filled by loadConfig().
 

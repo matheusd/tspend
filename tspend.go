@@ -18,6 +18,8 @@ import (
 	"github.com/decred/dcrd/blockchain/stake/v4"
 	blockchain "github.com/decred/dcrd/blockchain/standalone/v2"
 	"github.com/decred/dcrd/chaincfg/chainhash"
+	"github.com/decred/dcrd/crypto/blake256"
+	"github.com/decred/dcrd/dcrjson/v4"
 	"github.com/decred/dcrd/dcrutil/v4"
 	"github.com/decred/dcrd/rpcclient/v7"
 	"github.com/decred/dcrd/txscript/v4"
@@ -76,6 +78,13 @@ func zeroBytes(s []byte) {
 	for i := range s {
 		s[i] = 0
 	}
+}
+
+func isAlreadyHaveTxErr(err error) bool {
+	if jsonErr, ok := err.(*dcrjson.RPCError); ok {
+		return jsonErr.Code == dcrjson.ErrRPCDuplicateTx
+	}
+	return false
 }
 
 type payout struct {
@@ -175,7 +184,7 @@ func loadPayouts(cfg *config) ([]*payout, error) {
 	return payoutsFromCfg(cfg)
 }
 
-func loadOpReturnScript(cfg *config, totalPayout uint64) ([]byte, error) {
+func loadOpReturnScript(cfg *config, payouts []*payout, totalPayout uint64) ([]byte, error) {
 	var err error
 	randPayload := make([]byte, chainhash.HashSize)
 
@@ -183,7 +192,29 @@ func loadOpReturnScript(cfg *config, totalPayout uint64) ([]byte, error) {
 	binary.LittleEndian.PutUint64(randPayload, totalPayout)
 
 	// Read the random data.
-	if cfg.OpReturnData != "" {
+	if cfg.DeterministicOpReturn {
+		h := blake256.New()
+		h.Write([]byte("tspend OP_RETURN"))
+		var ab [8]byte
+		for _, p := range payouts {
+			version, script := p.address.PayFromTreasuryScript()
+			binary.LittleEndian.PutUint64(ab[:], uint64(p.amount))
+			h.Write(ab[:])
+			h.Write([]byte{byte(version << 8), byte(version)})
+			h.Write(script)
+		}
+
+		if cfg.OpReturnData != "" {
+			var extra [32]byte
+			n, err := hex.Decode(extra[:], []byte(cfg.OpReturnData))
+			if err != nil {
+				return nil, fmt.Errorf("unable to decode OP_RETURN data: %v", err)
+			}
+			h.Write(extra[:n])
+		}
+		hash := h.Sum(nil)
+		copy(randPayload[8:], hash)
+	} else if cfg.OpReturnData != "" {
 		_, err = hex.Decode(randPayload[8:], []byte(cfg.OpReturnData))
 	} else {
 		_, err = rand.Read(randPayload[8:])
@@ -330,7 +361,7 @@ func genTspend(cfg *config, ctx context.Context) error {
 	msgTx.TxIn[0].ValueIn = int64(valueInAmt)
 
 	// Figure out the real OP_RETURN script that encodes the value in.
-	msgTx.TxOut[0].PkScript, err = loadOpReturnScript(cfg, uint64(valueInAmt))
+	msgTx.TxOut[0].PkScript, err = loadOpReturnScript(cfg, payouts, uint64(valueInAmt))
 	if err != nil {
 		return err
 	}
@@ -362,10 +393,18 @@ func genTspend(cfg *config, ctx context.Context) error {
 	}
 
 	// Publish the tx if requested.
+	published, duplicated := false, false
+
 	if cfg.Publish {
 		_, err := c.SendRawTransaction(ctx, msgTx, true)
 		if err != nil {
-			return fmt.Errorf("Failed to publish tspend: %v", err)
+			if isAlreadyHaveTxErr(err) {
+				duplicated = true
+			} else {
+				return fmt.Errorf("Failed to publish tspend: %v", err)
+			}
+		} else {
+			published = true
 		}
 	}
 
@@ -406,11 +445,19 @@ func genTspend(cfg *config, ctx context.Context) error {
 	debugf("Total output amount: %s", totalPayout)
 	debugf("Total tx size: %d bytes", estimatedSize)
 	debugf("Total fees: %s", dcrutil.Amount(fee))
+	if published {
+		debugf("Published TSpend to dcrd at %s", cfg.DcrdConnect)
+	} else if duplicated {
+		debugf("Generated duplicated TSpend at dcrd %s", cfg.DcrdConnect)
+	}
 
 	if !foundPiKey {
 		log.Warnf("Private key does not correspond to a public Pi Key " +
 			"for the specified chain")
 	}
 
+	if c != nil {
+		c.Shutdown()
+	}
 	return nil
 }
