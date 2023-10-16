@@ -116,3 +116,20 @@ Show voting progress for TSpends in the mempool:
 ```shell
 go run ./voteprogress --simnet -u USER -P PASS
 ```
+
+## TSpend Spending Estimate
+
+Shows the current allowable spending estimate for a TSpend generated today and
+estimates how much is available after each TSpend in the current expenditure
+policy window no longer affects the max allowable expenditure.
+
+This is useful for determining when to generate new TSpends.
+
+**NOTE**: on mainnet, this may take a few seconds to go through all applicable
+blocks.
+
+```shell
+go run ./spendestimate -USER -P PASS
+```
+
+
